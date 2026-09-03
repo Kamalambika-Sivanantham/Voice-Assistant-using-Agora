@@ -43,9 +43,14 @@ export class ErrorBoundary extends React.Component<
             <h2 className="text-lg font-semibold text-destructive mb-4">
               Something went wrong
             </h2>
-            <p className="text-muted-foreground text-sm mb-6">
+            <p className="text-muted-foreground text-sm mb-4">
               An error occurred while loading the conversation. Please try refreshing the page.
             </p>
+            {this.state.error?.message && (
+              <p className="p-2 mb-6 text-xs font-mono bg-destructive/10 text-destructive rounded border border-destructive/20 break-words text-left">
+                {this.state.error.message}
+              </p>
+            )}
             <Button onClick={() => window.location.reload()}>
               Refresh Page
             </Button>

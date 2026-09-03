@@ -21,8 +21,17 @@ import {
   type UserTranscription,
   type AgentTranscription,
 } from 'agora-agent-client-toolkit';
-import { AgentVisualizer } from 'agora-agent-uikit';
-import { MicButtonWithVisualizer } from 'agora-agent-uikit/rtc';
+import dynamic from 'next/dynamic';
+
+const AgentVisualizer = dynamic(
+  () => import('agora-agent-uikit').then((mod) => mod.AgentVisualizer),
+  { ssr: false },
+);
+const MicButtonWithVisualizer = dynamic(
+  () =>
+    import('agora-agent-uikit/rtc').then((mod) => mod.MicButtonWithVisualizer),
+  { ssr: false },
+);
 import { DEFAULT_AGENT_UID } from '@/lib/agora';
 import {
   getCurrentInProgressMessage,

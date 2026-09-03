@@ -6,6 +6,7 @@ const rootDir = dirname(fileURLToPath(import.meta.url));
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  transpilePackages: ['agora-agent-uikit', 'agora-agent-client-toolkit', 'agora-rtc-react'],
   images: {
     unoptimized: true,
   },
