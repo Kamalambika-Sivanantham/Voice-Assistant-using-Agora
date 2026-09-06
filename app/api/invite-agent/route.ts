@@ -10,44 +10,37 @@ import {
 } from 'agora-agents';
 import { ClientStartRequest, AgentResponse } from '@/types/conversation';
 import { DEFAULT_AGENT_UID } from '@/lib/agora';
+import {
+  buildMasterSystemPrompt,
+  getMasterGreeting,
+} from '@/lib/agents/system-prompt';
 
-// System prompt that defines the agent's personality and behavior.
-// Fully bilingual in Tamil (தமிழ்) and English with automatic language matching.
-const ADA_PROMPT = `You are **Ada**, an agentic developer advocate from **Agora**. You help developers understand and build with Agora's Conversational AI platform. You are fully bilingual in **Tamil (தமிழ்)** and **English**.
+// Dynamic Master System Prompt with General Knowledge + Legal Complaint Resolution + Native Scripting
+const ADA_PROMPT = buildMasterSystemPrompt();
 
-# Language & Bilingual Rules (CRITICAL)
-- **Automatic Language Detection**: Always detect the language of the user's latest message or speech.
-- **Language Matching**:
-  - If the user speaks in **Tamil** (or Tamil written in English alphabet / Tanglish), you MUST respond in **fluent, natural, conversational Tamil** using the **Tamil script (தமிழ்)**.
-  - If the user speaks in **English**, you MUST respond in **clear, concise English**.
-  - If the user mixes Tamil and English (code-switching), respond in the dominant language or a natural conversational blend with Tamil in Tamil script.
-- **Natural Spoken Tamil**: When speaking Tamil, use everyday conversational spoken Tamil phrasing (such as "வணக்கம், உங்களுக்கு எப்படி உதவ முடியும்?"). Avoid stiff, overly formal literary Tamil so that speech synthesis sounds human and pleasant.
+function resolveLanguageConfig(requestedLanguage?: string) {
+  const lang = (requestedLanguage || 'auto').toLowerCase();
 
-# What Agora Actually Is
-Agora is a real-time communications company. The product you represent is the **Agora Conversational AI Engine** — it lets developers add voice AI agents to any app by connecting ASR, LLM, and TTS into a real-time pipeline over Agora's SD-RTN (Software Defined Real-Time Network). Key facts:
-- The product is called the **Conversational AI Engine** (not "Chorus", not "Harmony", or any other name you might invent)
-- It runs a full ASR → LLM → TTS pipeline with sub-500ms latency
-- It supports Deepgram, Microsoft, and others for ASR; OpenAI, Anthropic, and others for LLM; ElevenLabs, Microsoft, and others for TTS
-- Agora's SD-RTN is its global real-time network infrastructure — not "SDRTN"
-- MCP in this context means **Model Context Protocol** (Anthropic's open standard for connecting AI models to tools/data), not "multi-channel processing"
-- Agora does not have a product called Chorus, Harmony, or any similar name — do not invent product names
-
-# Honesty Rule
-If you don't know a specific fact about Agora, say so plainly and suggest checking docs.agora.io. Never invent product names, feature names, or capabilities.
-
-# Persona & Tone
-- Friendly, technically credible, concise. You're a peer who builds things, not a support agent.
-- Keep tone natural in both English and Tamil. No marketing fluff.
-
-# Core Behavior Guidelines
-- **Default to brief**: This is a voice conversation. Keep most replies to 1–2 sentences. Only go longer if the user explicitly asks for detail or the answer genuinely requires it.
-- **Never list or enumerate**: No bullet points, no numbered steps, no asterisks, no markdown formatting. Keep text clean for text-to-speech.
-- **Clarify before answering**: For anything complex, ask one focused question first.
-- **Ask at most one question per turn**: Never stack questions.
-- **Guide, don't lecture**: Unlock the next step, not everything at once.`;
-
-// First thing the agent says when a user joins the channel.
-const GREETING = `வணக்கம்! Hi there! I'm Ada, your virtual assistant from Agora. How can I help you today?`;
+  switch (lang) {
+    case 'en':
+      return { sttLanguage: 'en', turnLanguage: 'en-US' as const };
+    case 'ta':
+      return { sttLanguage: 'ta', turnLanguage: 'ta-IN' as const };
+    case 'hi':
+      return { sttLanguage: 'hi', turnLanguage: 'hi-IN' as const };
+    case 'kn':
+      return { sttLanguage: 'kn', turnLanguage: 'kn-IN' as const };
+    case 'te':
+      return { sttLanguage: 'te', turnLanguage: 'te-IN' as const };
+    case 'ml':
+      // Deepgram nova-3 supports South Asian languages; use 'en' STT with en-IN turn detection
+      return { sttLanguage: 'en', turnLanguage: 'en-IN' as const };
+    case 'auto':
+    default:
+      // Default to 'en' so English speech is transcribed in Latin characters without language distortion
+      return { sttLanguage: 'en', turnLanguage: 'en-US' as const };
+  }
+}
 
 // agentUid identifies the AI in the RTC channel and shares its default with the client.
 const agentUid = String(DEFAULT_AGENT_UID);
@@ -58,6 +51,9 @@ function requireEnv(name: string): string {
   return value;
 }
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     // --- 1. Parse request ---
@@ -65,9 +61,9 @@ export async function POST(request: NextRequest) {
     const body: ClientStartRequest = await request.json();
     const { requester_id, channel_name, language } = body;
 
-    // Support bilingual interaction: default to Tamil ('ta' / 'ta-IN') or use requested language.
-    const sttLanguage = language || 'ta';
-    const turnLanguage = sttLanguage === 'en' ? 'en-US' : 'ta-IN';
+    // Resolve language-specific STT and turn detection settings
+    const { sttLanguage, turnLanguage } = resolveLanguageConfig(language);
+    const greeting = getMasterGreeting(language);
 
     // Validate required env vars on first request so misconfiguration surfaces
     // with a clear error message rather than a silent failure.
@@ -96,7 +92,7 @@ export async function POST(request: NextRequest) {
     const agent = new Agent({
       client,
       instructions: ADA_PROMPT,
-      greeting: GREETING,
+      greeting,
       failureMessage: 'Please wait a moment.',
       maxHistory: 50,
       // VAD controls how the agent detects the start and end of a user's turn.
@@ -149,7 +145,7 @@ export async function POST(request: NextRequest) {
       .withLlm(
         new OpenAI({
           model: 'gpt-4o-mini',
-          greetingMessage: GREETING,
+          greetingMessage: greeting,
           failureMessage: 'Please wait a moment.',
           maxHistory: 15,
           params: {
@@ -163,7 +159,7 @@ export async function POST(request: NextRequest) {
         //   apiKey: requireEnv('NEXT_LLM_API_KEY'),
         //   url: requireEnv('NEXT_LLM_URL'),
         //   model: 'gpt-4o-mini',
-        //   greetingMessage: GREETING,
+        //   greetingMessage: greeting,
         //   failureMessage: 'Please wait a moment.',
         //   maxHistory: 15,
         //   maxTokens: 1024,

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { streamText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { randomUUID } from 'crypto';
+import { classifyIntentAndFreshness } from '@/lib/agents/router';
+import { knowledgeRetriever } from '@/lib/knowledge/retriever';
 
 type ChatBody = {
   messages?: Array<{ role: string; content: unknown }>;
@@ -21,8 +23,8 @@ type ChatCompletionsDeps = {
  * Agora's Conversational AI Engine calls this as its "custom LLM" — sending
  * standard OpenAI chat completion requests and expecting OpenAI SSE chunks back.
  *
- * Extension point: add RAG retrieval, tool calls, guards, etc. before/after
- * the streamText call.
+ * Automatically intercepts time-sensitive / current information queries, executes
+ * live knowledge retrieval, and injects grounded authoritative context before streaming.
  */
 export function createChatCompletionsHandler({
   createOpenAIClient,
@@ -56,10 +58,60 @@ export function createChatCompletionsHandler({
 
     const openai = createOpenAIClient({ apiKey, baseURL });
 
+    // Dynamic Live Retrieval Augmentation
+    const rawMessages = (body.messages ?? []) as Array<{ role: string; content: string }>;
+    const lastUserMsg = [...rawMessages].reverse().find((m) => m.role === 'user')?.content;
+
+    const augmentedMessages = [...rawMessages];
+    let groundedContextIncluded = false;
+
+    if (lastUserMsg && typeof lastUserMsg === 'string') {
+      try {
+        const classification = classifyIntentAndFreshness(lastUserMsg);
+
+        console.log(
+          `[ROUTER] query: "${classification.query}" | intent: ${classification.intent} | needsFreshInformation: ${classification.needsFreshInformation}`,
+        );
+
+        if (classification.needsFreshInformation) {
+          console.log(`[RETRIEVAL] triggered: true | query: "${classification.query}"`);
+          const sources = await knowledgeRetriever.getCurrentInformation(classification.query);
+
+          console.log(
+            `[RETRIEVAL] results count: ${sources.length} | top source: ${sources[0]?.sourceName || 'none'}`,
+          );
+
+          if (sources.length > 0) {
+            groundedContextIncluded = true;
+            const contextSnippet = sources
+              .map(
+                (s, i) =>
+                  `[Source ${i + 1}] (${s.sourceName}): ${s.title}\nURL: ${s.url}\nSummary: ${s.snippet}`,
+              )
+              .join('\n\n');
+
+            augmentedMessages.push({
+              role: 'system',
+              content: `VERIFIED FRESH KNOWLEDGE CONTEXT:\n${contextSnippet}\n\nCRITICAL GROUNDING INSTRUCTIONS:\n- Answer using the retrieved information above.\n- Do NOT contradict reliable retrieved evidence with pretrained memory.\n- If the user corrected a previous answer, acknowledge the update gracefully.\n- Keep your voice response concise (1-4 sentences) and maintain strict native script for the language spoken.`,
+            });
+          } else {
+            augmentedMessages.push({
+              role: 'system',
+              content: `CURRENT INFORMATION NOTICE:\nLive retrieval was attempted for "${classification.query}", but real-time verification could not be confirmed. State clearly that the latest real-time status could not be verified right now instead of guessing from stale memory.`,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[RETRIEVAL] Knowledge retrieval error (continuing with base model):', err);
+      }
+    }
+
+    console.log(`[LLM] groundedContextIncluded: ${groundedContextIncluded}`);
+
     const result = streamTextImpl({
       // modelId is always sourced from the environment — body.model is ignored
       model: openai(modelId),
-      messages: (body.messages ?? []) as NonNullable<
+      messages: augmentedMessages as NonNullable<
         Parameters<typeof streamText>[0]['messages']
       >,
     });
@@ -113,4 +165,3 @@ export function createChatCompletionsHandler({
     });
   };
 }
-

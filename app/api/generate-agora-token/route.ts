@@ -9,6 +9,8 @@ function generateChannelName(): string {
   return `ai-conversation-${timestamp}-${random}`;
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   // console.log('Generating Agora token...');
   const APP_ID = process.env.NEXT_PUBLIC_AGORA_APP_ID;

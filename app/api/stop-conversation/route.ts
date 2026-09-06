@@ -22,6 +22,8 @@ function isAgentAlreadyStoppingOrStopped(error: unknown): boolean {
   return false;
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
   try {
     const body: StopConversationRequest = await request.json();

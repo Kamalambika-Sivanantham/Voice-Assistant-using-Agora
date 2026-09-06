@@ -9,6 +9,7 @@ import type {
   ClientStartRequest,
   AgentResponse,
   AgoraRenewalTokens,
+  SupportedLanguage,
 } from '../types/conversation';
 import { ErrorBoundary } from './ErrorBoundary';
 import { LoadingSkeleton } from './LoadingSkeleton';
@@ -56,6 +57,8 @@ const AgoraProvider = dynamic(
 
 export default function LandingPage() {
   const [showConversation, setShowConversation] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] =
+    useState<SupportedLanguage>('auto');
 
   // Preload heavy modules on mount so they're already cached when the user
   // clicks "Try it Now" — eliminates the ~1.8s dynamic-import delay.
@@ -98,6 +101,7 @@ export default function LandingPage() {
           body: JSON.stringify({
             requester_id: responseData.uid,
             channel_name: responseData.channel,
+            language: selectedLanguage,
           } as ClientStartRequest),
         })
           .then(async (res) => {
@@ -222,6 +226,8 @@ export default function LandingPage() {
             <QuickstartPreCallCard
               isLoading={isLoading}
               error={error}
+              selectedLanguage={selectedLanguage}
+              onLanguageChange={setSelectedLanguage}
               onStartConversation={handleStartConversation}
             />
           ) : agoraData && rtmClient ? (

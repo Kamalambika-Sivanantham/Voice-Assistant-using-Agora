@@ -7,10 +7,19 @@ export interface AgoraTokenData {
   agentId?: string;
 }
 
+export type SupportedLanguage =
+  | 'auto'
+  | 'en'
+  | 'ta'
+  | 'hi'
+  | 'ml'
+  | 'kn'
+  | 'te';
+
 export interface ClientStartRequest {
   requester_id: string;
   channel_name: string;
-  language?: string;
+  language?: SupportedLanguage | string;
 }
 
 export interface StopConversationRequest {
