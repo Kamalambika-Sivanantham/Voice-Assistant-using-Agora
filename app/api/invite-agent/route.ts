@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  AgoraClient,
   Agent,
+  Area,
   DeepgramSTT,
   ExpiresIn,
   MiniMaxTTS,
   OpenAI,
 } from 'agora-agents';
 import { ClientStartRequest, AgentResponse } from '@/types/conversation';
+import { DEFAULT_AGENT_UID } from '@/lib/agora';
 import { DEFAULT_AGENT_UID, createAgoraClient } from '@/lib/agora-server';
 import {
   buildMasterSystemPrompt,
@@ -78,6 +81,12 @@ export async function POST(request: NextRequest) {
     // --- 2. Build and start the agent ---
 
     // AgoraClient authenticates API calls to the Agora Conversational AI service.
+    // area: change to Area.EU or Area.AP for European or Asia-Pacific deployments.
+    const client = new AgoraClient({
+      area: Area.US,
+      appId,
+      appCertificate,
+    });
     // createAgoraClient targets the official global API gateway (api.agora.io) first.
     const client = createAgoraClient(appId, appCertificate);
 

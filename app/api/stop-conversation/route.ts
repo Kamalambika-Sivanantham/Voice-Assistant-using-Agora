@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { AgoraClient, Area } from 'agora-agents';
 import { createAgoraClient } from '@/lib/agora-server';
 import { StopConversationRequest } from '@/types/conversation';
 
@@ -44,6 +45,12 @@ export async function POST(request: Request) {
       );
     }
 
+    // area: change to Area.EU or Area.AP for European or Asia-Pacific deployments.
+    const client = new AgoraClient({
+      area: Area.US,
+      appId,
+      appCertificate,
+    });
     const client = createAgoraClient(appId, appCertificate);
     try {
       await client.stopAgent(agent_id);
